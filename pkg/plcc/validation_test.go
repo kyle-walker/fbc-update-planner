@@ -121,6 +121,42 @@ func TestListValidatorsIncludesCatalog(t *testing.T) {
 	}
 }
 
+// --- EOL version skip ---
+
+func TestEOLVersionsSkipped(t *testing.T) {
+	eolVersion := Version{
+		Name: "1.0",
+		Type: "End of life",
+		Tier: "Aligned",
+		Phases: []Phase{
+			{Name: "Full support", StartDate: "not-a-date", EndDate: "also-bad", StartDateFormat: "string", EndDateFormat: "string"},
+		},
+	}
+	p := Product{
+		Package:        "my-operator",
+		IsOperator:     true,
+		ReleaseCadence: "4 months",
+		Versions:       []Version{eolVersion},
+	}
+	validators := DefaultValidators()
+	reasons := ValidateProduct(p, validators...)
+	if len(reasons) != 0 {
+		t.Errorf("expected no reasons for EOL-only product, got %v", reasons)
+	}
+}
+
+func TestEOLVersionSkipCaseInsensitive(t *testing.T) {
+	for _, typ := range []string{"End of life", "end of life", "END OF LIFE", " End of life "} {
+		t.Run(typ, func(t *testing.T) {
+			p := Product{Versions: []Version{{Name: "bad-name", Type: typ}}}
+			reasons := ValidateVersionNames(p)
+			if len(reasons) != 0 {
+				t.Errorf("type=%q: expected skip, got %v", typ, reasons)
+			}
+		})
+	}
+}
+
 // --- REQ-DATE-02 ---
 
 func TestValidateDatesStatic(t *testing.T) {
@@ -172,6 +208,9 @@ func TestValidateDatesClean(t *testing.T) {
 		{"dirty date", Product{Versions: []Version{{Name: "1.0", Phases: []Phase{
 			{Name: "Full support", StartDate: "not-a-date", EndDate: "2025-06-30T00:00:00.000Z"},
 		}}}}, false},
+		{"EOL version skipped", Product{Versions: []Version{{Name: "1.0", Type: "End of life", Phases: []Phase{
+			{Name: "Full support", StartDate: "not-a-date", EndDate: "2025-06-30T00:00:00.000Z"},
+		}}}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -235,6 +274,7 @@ func TestValidateVersionNames(t *testing.T) {
 		{"invalid patch", Product{Versions: []Version{{Name: "1.0.1"}}}, false},
 		{"invalid suffix", Product{Versions: []Version{{Name: "4.6 EUS"}}}, false},
 		{"invalid wildcard", Product{Versions: []Version{{Name: "6.x"}}}, false},
+		{"EOL version skipped", Product{Versions: []Version{{Name: "6.x", Type: "End of life"}}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -269,6 +309,7 @@ func TestValidatePlatformAlignedPhases(t *testing.T) {
 			{Name: PhaseEUSTerm2, StartDate: "N/A", EndDate: "N/A"},
 			{Name: PhaseEUSTerm3, StartDate: "N/A", EndDate: "N/A"},
 		}}}}, false},
+		{"EOL version skipped", Product{Versions: []Version{{Name: "4.16", Type: "End of life", Tier: "Aligned"}}}, true},
 		{"missing EUS term 2", Product{Versions: []Version{{Name: "4.16", Tier: "Aligned", Phases: []Phase{
 			{Name: PhaseFullSupport, StartDate: "2025-01-01T00:00:00.000Z", EndDate: "2025-06-30T00:00:00.000Z"},
 			{Name: PhaseMaintenance, StartDate: "2025-07-01T00:00:00.000Z", EndDate: "2025-12-31T00:00:00.000Z"},
@@ -512,6 +553,7 @@ func TestValidateTierSelected(t *testing.T) {
 		{"operator N/A tier", Product{IsOperator: true, Versions: []Version{{Name: "1.0", Tier: "N/A"}}}, false},
 		{"operator dash tier", Product{IsOperator: true, Versions: []Version{{Name: "1.0", Tier: "-"}}}, false},
 		{"operator empty tier", Product{IsOperator: true, Versions: []Version{{Name: "1.0", Tier: ""}}}, false},
+		{"operator EOL version skipped", Product{IsOperator: true, Versions: []Version{{Name: "1.0", Type: "End of life", Tier: ""}}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

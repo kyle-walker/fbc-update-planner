@@ -49,6 +49,7 @@ type Version struct {
 	Phases                 []Phase `json:"phases"`
 	OpenShiftCompatibility string  `json:"openshift_compatibility"`
 	Tier                   string  `json:"tier"`
+	Type                   string  `json:"type"`
 }
 
 // Phase represents a lifecycle phase with start and end dates (ISO8601 timestamps).
