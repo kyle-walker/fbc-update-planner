@@ -36,19 +36,23 @@ type Catalog struct {
 
 // Product represents a software product with its lifecycle versions.
 type Product struct {
-	Name           string    `json:"name"`
-	Package        string    `json:"package"`
-	Versions       []Version `json:"versions"`
-	ReleaseCadence string    `json:"release_cadence"`
-	IsOperator     bool      `json:"is_operator"`
+	Name               string    `json:"name"`
+	Package            string    `json:"package"`
+	Versions           []Version `json:"versions"`
+	ReleaseCadence     string    `json:"release_cadence"`
+	IsOperator         bool      `json:"is_operator"`
+	IsLayeredProduct   bool      `json:"is_layered_product"`
+	Link               string    `json:"link"`
+	ProductExtraHeaders []string `json:"product_extra_headers"`
 }
 
 // Version represents a product version with its lifecycle phases and platform compatibility.
 type Version struct {
-	Name                   string  `json:"name"`
-	Phases                 []Phase `json:"phases"`
-	OpenShiftCompatibility string  `json:"openshift_compatibility"`
-	Tier                   string  `json:"tier"`
+	Name                   string   `json:"name"`
+	Phases                 []Phase  `json:"phases"`
+	OpenShiftCompatibility string   `json:"openshift_compatibility"`
+	Tier                   string   `json:"tier"`
+	ExtraDependences       []string `json:"extra_dependences"`
 }
 
 // Phase represents a lifecycle phase with start and end dates (ISO8601 timestamps).

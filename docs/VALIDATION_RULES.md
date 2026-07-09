@@ -62,7 +62,7 @@ Validators are split into three groups: `SyntaxValidators()` (data format/struct
 
 The three-tier lifecycle model (Platform Aligned / Platform Agnostic / Rolling Stream) was introduced with OCP 4.14, which GA'd on 2023-10-31 (`TierModelCutoffDate`). Versions whose earliest parseable phase start date predates this cutoff — or that have no phases with parseable dates — are considered **pre-tier-model** and are exempt from tier-specific validators. This prevents false positives on legacy versions that were published before the tier model existed.
 
-Tier-specific validators that apply the skip: `ValidateTierSelected` (REQ-TIER-ALL-02), `ValidatePlatformAlignedPhases` (REQ-TIER-PA-01), `ValidatePlatformAlignedOCP` (REQ-TIER-PA-02), `ValidatePlatformAgnosticPhases` (REQ-TIER-AG-01), `ValidatePlatformAgnosticEUSPhases` (REQ-TIER-AG-03), `ValidatePlatformAgnosticEUSOCP` (REQ-TIER-AG-04), `ValidateRollingStreamPhases` (REQ-TIER-RS-01), `ValidateRollingStreamForbiddenPhases` (REQ-TIER-RS-02), `ValidateOCPFormat` (REQ-FIELD-02), `ValidateOCPFormatAll` (CUSTOM-04).
+Tier-specific validators that apply the skip: `ValidateTierSelected` (REQ-TIER-ALL-02), `ValidatePlatformAlignedPhases` (REQ-TIER-PA-01), `ValidatePlatformAlignedOCP` (REQ-TIER-PA-02), `ValidatePlatformAgnosticPhases` (REQ-TIER-AG-01), `ValidatePlatformAgnosticEUSPhases` (REQ-TIER-AG-03), `ValidatePlatformAgnosticEUSOCP` (REQ-TIER-AG-04), `ValidateRollingStreamPhases` (REQ-TIER-RS-01), `ValidateRollingStreamForbiddenPhases` (REQ-TIER-RS-02), `ValidateLayeredProductTier` (REQ-TIER-LP-01), `ValidateOCPFormat` (REQ-FIELD-02), `ValidateOCPFormatAll` (CUSTOM-04).
 
 Universal invariants that always apply regardless of version age: `ValidateDatesStatic` (REQ-DATE-02), `ValidateDatesClean` (REQ-DATE-03), `ValidateDatesContiguity` (REQ-DATE-04), `ValidateVersionNames` (REQ-VER-01), `ValidatePhaseEndAfterStart` (CUSTOM-03), `ValidateReleaseCadence` (REQ-TIER-ALL-01), `ValidateIsOperator` (CUSTOM-01), `ValidateHasVersions` (CUSTOM-02).
 
@@ -85,7 +85,7 @@ Universal invariants that always apply regardless of version age: `ValidateDates
 | # | Function | Label | Purpose |
 |---|----------|-------|---------|
 | 1 | `ValidateReleaseCadence` | REQ-TIER-ALL-01 | Operators must have release cadence specified |
-| 2 | `ValidateTierSelected` | REQ-TIER-ALL-02 | Operator versions must have lifecycle tier selected |
+| 2 | `ValidateTierSelected` | REQ-TIER-ALL-02 | Operator versions must have lifecycle tier selected (layered products exempt) |
 | 3 | `ValidatePlatformAlignedPhases` | REQ-TIER-PA-01 | Aligned: Full Support, Maintenance, EUS 1/2/3 with parseable dates |
 | 4 | `ValidatePlatformAlignedOCP` | REQ-TIER-PA-02 | Aligned: OCP compatibility must be specified |
 | 5 | `ValidatePlatformAgnosticPhases` | REQ-TIER-AG-01 | Agnostic: Full Support and Maintenance with parseable dates |
@@ -93,6 +93,9 @@ Universal invariants that always apply regardless of version age: `ValidateDates
 | 7 | `ValidatePlatformAgnosticEUSOCP` | REQ-TIER-AG-04 | EUS-aligned agnostic: OCP compatibility must be specified |
 | 8 | `ValidateRollingStreamPhases` | REQ-TIER-RS-01 | Rolling: Full Support with parseable dates |
 | 9 | `ValidateRollingStreamForbiddenPhases` | REQ-TIER-RS-02 | Rolling: must not include Maintenance or EUS phases |
+| 10 | `ValidateLayeredProductTier` | REQ-TIER-LP-01 | Layered product: all post-cutoff versions must have tier N/A |
+| 11 | `ValidateLayeredProductGrouping` | REQ-TIER-LP-02 | Layered product: must have "Layered Product" header and extra_dependences per version |
+| 12 | `ValidateLayeredProductLink` | REQ-TIER-LP-03 | Layered product: must have link to parent product lifecycle page (not generic OCP page) |
 
 #### Catalog-Level Validators (group: `catalog`)
 

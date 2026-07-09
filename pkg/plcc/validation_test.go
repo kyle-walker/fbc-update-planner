@@ -761,6 +761,199 @@ func TestValidatePhaseEndAfterStart(t *testing.T) {
 	}
 }
 
+// --- REQ-TIER-LP-01 ---
+
+func TestValidateLayeredProductTier(t *testing.T) {
+	tests := []struct {
+		name   string
+		p      Product
+		wantOK bool
+	}{
+		{"non-layered skipped", Product{IsLayeredProduct: false, Versions: []Version{{Name: "1.0", Tier: "Aligned", Phases: []Phase{
+			{Name: "Full support", StartDate: "2024-01-01T00:00:00.000Z", EndDate: "2025-01-01T00:00:00.000Z"},
+		}}}}, true},
+		{"all versions N/A", Product{IsLayeredProduct: true, Versions: []Version{
+			{Name: "1.0", Tier: "N/A", Phases: []Phase{
+				{Name: "Full support", StartDate: "2024-01-01T00:00:00.000Z", EndDate: "2025-01-01T00:00:00.000Z"},
+			}},
+			{Name: "2.0", Tier: "N/A", Phases: []Phase{
+				{Name: "Full support", StartDate: "2025-01-01T00:00:00.000Z", EndDate: "2026-01-01T00:00:00.000Z"},
+			}},
+		}}, true},
+		{"version with Aligned tier", Product{IsLayeredProduct: true, Versions: []Version{{Name: "1.0", Tier: "Aligned", Phases: []Phase{
+			{Name: "Full support", StartDate: "2024-01-01T00:00:00.000Z", EndDate: "2025-01-01T00:00:00.000Z"},
+		}}}}, false},
+		{"version with Agnostic tier", Product{IsLayeredProduct: true, Versions: []Version{{Name: "1.0", Tier: "Agnostic", Phases: []Phase{
+			{Name: "Full support", StartDate: "2024-01-01T00:00:00.000Z", EndDate: "2025-01-01T00:00:00.000Z"},
+		}}}}, false},
+		{"pre-tier-model skipped", Product{IsLayeredProduct: true, Versions: []Version{{Name: "1.0", Tier: "Aligned", Phases: []Phase{
+			{Name: "Full support", StartDate: "2020-01-01T00:00:00.000Z", EndDate: "2021-01-01T00:00:00.000Z"},
+		}}}}, true},
+		{"mixed: one N/A one Aligned", Product{IsLayeredProduct: true, Versions: []Version{
+			{Name: "1.0", Tier: "N/A", Phases: []Phase{
+				{Name: "Full support", StartDate: "2024-01-01T00:00:00.000Z", EndDate: "2025-01-01T00:00:00.000Z"},
+			}},
+			{Name: "2.0", Tier: "Aligned", Phases: []Phase{
+				{Name: "Full support", StartDate: "2025-01-01T00:00:00.000Z", EndDate: "2026-01-01T00:00:00.000Z"},
+			}},
+		}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reasons := ValidateLayeredProductTier(tt.p)
+			if (len(reasons) == 0) != tt.wantOK {
+				t.Errorf("ok = %v, want %v; reasons: %v", len(reasons) == 0, tt.wantOK, reasons)
+			}
+		})
+	}
+}
+
+// --- REQ-TIER-LP-02 ---
+
+func TestValidateLayeredProductGrouping(t *testing.T) {
+	tests := []struct {
+		name   string
+		p      Product
+		wantOK bool
+	}{
+		{"non-layered skipped", Product{IsLayeredProduct: false}, true},
+		{"header and deps present", Product{
+			IsLayeredProduct:    true,
+			ProductExtraHeaders: []string{"Layered Product"},
+			Versions: []Version{
+				{Name: "1.0", ExtraDependences: []string{"Red Hat OpenShift Data Foundation"}},
+				{Name: "2.0", ExtraDependences: []string{"Red Hat OpenShift Data Foundation"}},
+			},
+		}, true},
+		{"missing header", Product{
+			IsLayeredProduct:    true,
+			ProductExtraHeaders: []string{},
+			Versions: []Version{
+				{Name: "1.0", ExtraDependences: []string{"Red Hat OpenShift Data Foundation"}},
+			},
+		}, false},
+		{"missing deps on one version", Product{
+			IsLayeredProduct:    true,
+			ProductExtraHeaders: []string{"Layered Product"},
+			Versions: []Version{
+				{Name: "1.0", ExtraDependences: []string{"Red Hat OpenShift Data Foundation"}},
+				{Name: "2.0", ExtraDependences: []string{}},
+			},
+		}, false},
+		{"nil deps", Product{
+			IsLayeredProduct:    true,
+			ProductExtraHeaders: []string{"Layered Product"},
+			Versions:            []Version{{Name: "1.0"}},
+		}, false},
+		{"both missing", Product{
+			IsLayeredProduct: true,
+			Versions:         []Version{{Name: "1.0"}},
+		}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reasons := ValidateLayeredProductGrouping(tt.p)
+			if (len(reasons) == 0) != tt.wantOK {
+				t.Errorf("ok = %v, want %v; reasons: %v", len(reasons) == 0, tt.wantOK, reasons)
+			}
+		})
+	}
+}
+
+// --- REQ-TIER-LP-03 ---
+
+func TestValidateLayeredProductLink(t *testing.T) {
+	tests := []struct {
+		name   string
+		p      Product
+		wantOK bool
+	}{
+		{"non-layered skipped", Product{IsLayeredProduct: false, Link: ""}, true},
+		{"valid link", Product{IsLayeredProduct: true, Link: "https://access.redhat.com/support/policy/updates/odf"}, true},
+		{"empty link", Product{IsLayeredProduct: true, Link: ""}, false},
+		{"whitespace-only link", Product{IsLayeredProduct: true, Link: "  "}, false},
+		{"generic OCP operators page", Product{IsLayeredProduct: true, Link: "https://access.redhat.com/support/policy/updates/openshift_operators"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reasons := ValidateLayeredProductLink(tt.p)
+			if (len(reasons) == 0) != tt.wantOK {
+				t.Errorf("ok = %v, want %v; reasons: %v", len(reasons) == 0, tt.wantOK, reasons)
+			}
+		})
+	}
+}
+
+// --- Layered product: ValidateTierSelected exemption ---
+
+func TestValidateTierSelectedLayeredProductExemption(t *testing.T) {
+	postCutoffPhase := []Phase{
+		{Name: "Full support", StartDate: "2024-01-01T00:00:00.000Z", EndDate: "2025-01-01T00:00:00.000Z"},
+	}
+	tests := []struct {
+		name   string
+		p      Product
+		wantOK bool
+	}{
+		{"non-layered N/A still rejected", Product{
+			IsOperator:       true,
+			IsLayeredProduct: false,
+			Versions:         []Version{{Name: "1.0", Tier: "N/A", Phases: postCutoffPhase}},
+		}, false},
+		{"layered N/A exempt", Product{
+			IsOperator:       true,
+			IsLayeredProduct: true,
+			Versions:         []Version{{Name: "1.0", Tier: "N/A", Phases: postCutoffPhase}},
+		}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reasons := ValidateTierSelected(tt.p)
+			if (len(reasons) == 0) != tt.wantOK {
+				t.Errorf("ok = %v, want %v; reasons: %v", len(reasons) == 0, tt.wantOK, reasons)
+			}
+		})
+	}
+}
+
+// --- Non-layered operator regression ---
+
+func TestNonLayeredOperatorsUnaffectedByLayeredProductValidators(t *testing.T) {
+	nonLayered := Product{
+		Package:          "my-operator",
+		IsOperator:       true,
+		IsLayeredProduct: false,
+		ReleaseCadence:   "4 months",
+		Versions: []Version{{
+			Name: "1.0",
+			Tier: "Aligned",
+			Phases: []Phase{
+				{Name: PhaseFullSupport, StartDate: "2025-01-01T00:00:00.000Z", EndDate: "2025-06-30T00:00:00.000Z"},
+				{Name: PhaseMaintenance, StartDate: "2025-07-01T00:00:00.000Z", EndDate: "2025-12-31T00:00:00.000Z"},
+				{Name: PhaseEUSTerm1, StartDate: "2026-01-01T00:00:00.000Z", EndDate: "2026-06-30T00:00:00.000Z"},
+				{Name: PhaseEUSTerm2, StartDate: "2026-07-01T00:00:00.000Z", EndDate: "2026-12-31T00:00:00.000Z"},
+				{Name: PhaseEUSTerm3, StartDate: "2027-01-01T00:00:00.000Z", EndDate: "2027-06-30T00:00:00.000Z"},
+			},
+			OpenShiftCompatibility: "4.16",
+		}},
+	}
+	lpValidators := []struct {
+		name string
+		fn   Validator
+	}{
+		{"ValidateLayeredProductTier", ValidateLayeredProductTier},
+		{"ValidateLayeredProductGrouping", ValidateLayeredProductGrouping},
+		{"ValidateLayeredProductLink", ValidateLayeredProductLink},
+	}
+	for _, v := range lpValidators {
+		t.Run(v.name, func(t *testing.T) {
+			if reasons := v.fn(nonLayered); len(reasons) != 0 {
+				t.Errorf("LP validator should not fire on non-layered operator, got %v", reasons)
+			}
+		})
+	}
+}
+
 // --- CUSTOM-04 ---
 
 func TestValidateOCPFormatAll(t *testing.T) {

@@ -40,7 +40,12 @@ const (
 	TierAligned  = "Aligned"
 	TierAgnostic = "Agnostic"
 	TierRolling  = "Rolling"
+	TierNA       = "N/A"
 )
+
+// LayeredProductHeader is the required product_extra_headers value for
+// layered product operators.
+const LayeredProductHeader = "Layered Product"
 
 // TierModelCutoffDate is the OCP 4.14 GA date (2023-10-31). The three-tier
 // lifecycle model (Aligned/Agnostic/Rolling) commenced with this release.
@@ -132,6 +137,9 @@ var validatorRegistry = []validatorEntry{
 	{"REQ-TIER-RS-02", "semantic", []Validator{ValidateRollingStreamForbiddenPhases}},
 	{"REQ-TIER-ALL-01", "semantic", []Validator{ValidateReleaseCadence}},
 	{"REQ-TIER-ALL-02", "semantic", []Validator{ValidateTierSelected}},
+	{"REQ-TIER-LP-01", "semantic", []Validator{ValidateLayeredProductTier}},
+	{"REQ-TIER-LP-02", "semantic", []Validator{ValidateLayeredProductGrouping}},
+	{"REQ-TIER-LP-03", "semantic", []Validator{ValidateLayeredProductLink}},
 	{"REQ-FIELD-02", "syntax", []Validator{ValidateOCPFormat}},
 	{"CUSTOM-01", "syntax", []Validator{ValidateIsOperator}},
 	{"CUSTOM-02", "syntax", []Validator{ValidateHasVersions}},
@@ -486,10 +494,11 @@ func ValidateReleaseCadence(p Product) []string {
 }
 
 // ValidateTierSelected checks that every version of an operator product has a
-// lifecycle tier selected. Non-operator products are skipped.
+// lifecycle tier selected. Non-operator products and layered product operators
+// are skipped (layered products use tier N/A by design; see REQ-TIER-LP-01a).
 // REQ-TIER-ALL-02
 func ValidateTierSelected(p Product) []string {
-	if !p.IsOperator {
+	if !p.IsOperator || p.IsLayeredProduct {
 		return nil
 	}
 	var reasons []string
@@ -498,11 +507,83 @@ func ValidateTierSelected(p Product) []string {
 			continue
 		}
 		tier := versionTier(v)
-		if tier == "" || tier == "N/A" || tier == "-" {
+		if tier == "" || tier == TierNA || tier == "-" {
 			reasons = append(reasons, fmt.Sprintf("REQ-TIER-ALL-02: version %q: lifecycle tier not selected (tier=%q)", v.Name, v.Tier))
 		}
 	}
 	return reasons
+}
+
+// ValidateLayeredProductTier checks that all versions of a layered product operator
+// have tier set to N/A. Non-layered products are skipped.
+// REQ-TIER-LP-01
+func ValidateLayeredProductTier(p Product) []string {
+	if !p.IsLayeredProduct {
+		return nil
+	}
+	var reasons []string
+	for _, v := range p.Versions {
+		if isPreTierModel(v) {
+			continue
+		}
+		tier := versionTier(v)
+		if tier != TierNA {
+			reasons = append(reasons, fmt.Sprintf("REQ-TIER-LP-01: version %q: layered product operator must have tier %q, got %q", v.Name, TierNA, tier))
+		}
+	}
+	return reasons
+}
+
+// ValidateLayeredProductGrouping checks that a layered product operator has the
+// "Layered Product" header in product_extra_headers and that every version has a
+// populated extra_dependences value identifying the parent product.
+// Non-layered products are skipped.
+// REQ-TIER-LP-02
+func ValidateLayeredProductGrouping(p Product) []string {
+	if !p.IsLayeredProduct {
+		return nil
+	}
+	var reasons []string
+	if !hasExtraHeader(p, LayeredProductHeader) {
+		reasons = append(reasons, fmt.Sprintf("REQ-TIER-LP-02: product_extra_headers must include %q", LayeredProductHeader))
+	}
+	for _, v := range p.Versions {
+		if len(v.ExtraDependences) == 0 {
+			reasons = append(reasons, fmt.Sprintf("REQ-TIER-LP-02: version %q: extra_dependences must identify the parent layered product", v.Name))
+		}
+	}
+	return reasons
+}
+
+// genericOCPOperatorsLink is the link to the generic OCP operators lifecycle page,
+// which is non-compliant for layered product operators.
+const genericOCPOperatorsLink = "https://access.redhat.com/support/policy/updates/openshift_operators"
+
+// ValidateLayeredProductLink checks that a layered product operator has a non-empty
+// link pointing to the parent product's lifecycle page, not the generic OCP operators page.
+// Non-layered products are skipped.
+// REQ-TIER-LP-03
+func ValidateLayeredProductLink(p Product) []string {
+	if !p.IsLayeredProduct {
+		return nil
+	}
+	link := strings.TrimSpace(p.Link)
+	if link == "" {
+		return []string{"REQ-TIER-LP-03: layered product operator must have a non-empty link to the parent product lifecycle page"}
+	}
+	if link == genericOCPOperatorsLink {
+		return []string{fmt.Sprintf("REQ-TIER-LP-03: link must point to the parent product lifecycle page, not the generic OCP operators page (%s)", genericOCPOperatorsLink)}
+	}
+	return nil
+}
+
+func hasExtraHeader(p Product, header string) bool {
+	for _, h := range p.ProductExtraHeaders {
+		if h == header {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateOCPFormat checks that OCP compatibility values on platform-aligned versions
